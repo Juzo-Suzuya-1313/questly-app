@@ -1,23 +1,27 @@
 import { useState, useEffect } from "react";
-import { mockQuizzes } from "@/data/mockQuizzes";
-import { Quiz, UserAnswer, QuizResult as QuizResultType } from "@/types/quiz";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useQuizzes } from "@/hooks/useQuizzes";
+import { supabase } from "@/integrations/supabase/client";
 import { QuizCard } from "@/components/QuizCard";
 import { QuizQuestion } from "@/components/QuizQuestion";
 import { QuizProgress } from "@/components/QuizProgress";
 import { QuizResult } from "@/components/QuizResult";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, CheckCircle, Brain } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle, Brain, Plus, LogOut, LogIn } from "lucide-react";
 import { toast } from "sonner";
 
-type ViewState = "home" | "quiz" | "result";
-
 const Index = () => {
-  const [view, setView] = useState<ViewState>("home");
-  const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+  const { data: quizzes, isLoading } = useQuizzes();
+  
+  const [view, setView] = useState("home");
+  const [currentQuiz, setCurrentQuiz] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState<UserAnswer[]>([]);
-  const [result, setResult] = useState<QuizResultType | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number | undefined>(undefined);
+  const [answers, setAnswers] = useState([]);
+  const [result, setResult] = useState(null);
+  const [timeRemaining, setTimeRemaining] = useState(undefined);
 
   useEffect(() => {
     if (view === "quiz" && currentQuiz?.duration) {
@@ -37,8 +41,8 @@ const Index = () => {
     }
   }, [view, currentQuiz]);
 
-  const handleStartQuiz = (quizId: string) => {
-    const quiz = mockQuizzes.find((q) => q.id === quizId);
+  const handleStartQuiz = (quizId) => {
+    const quiz = quizzes?.find((q) => q.id === quizId);
     if (quiz) {
       setCurrentQuiz(quiz);
       setCurrentQuestionIndex(0);
@@ -49,7 +53,7 @@ const Index = () => {
     }
   };
 
-  const handleSelectOption = (optionId: string) => {
+  const handleSelectOption = (optionId) => {
     if (!currentQuiz) return;
 
     const currentQuestion = currentQuiz.questions[currentQuestionIndex];
@@ -84,7 +88,7 @@ const Index = () => {
     }
   };
 
-  const handleSubmitQuiz = () => {
+  const handleSubmitQuiz = async () => {
     if (!currentQuiz) return;
 
     if (answers.length < currentQuiz.questions.length) {
@@ -95,15 +99,28 @@ const Index = () => {
     let score = 0;
     const correctAnswers = currentQuiz.questions.map((q) => ({
       questionId: q.id,
-      correctOptionId: q.correctOptionId,
+      correctOptionId: q.correct_option_id,
     }));
 
     answers.forEach((answer) => {
       const question = currentQuiz.questions.find((q) => q.id === answer.questionId);
-      if (question && answer.selectedOptionId === question.correctOptionId) {
+      if (question && answer.selectedOptionId === question.correct_option_id) {
         score++;
       }
     });
+
+    if (user) {
+      try {
+        await supabase.from("quiz_results").insert({
+          user_id: user.id,
+          quiz_id: currentQuiz.id,
+          score,
+          total_questions: currentQuiz.questions.length,
+        });
+      } catch (error) {
+        console.error("Error saving result:", error);
+      }
+    }
 
     setResult({
       score,
@@ -140,23 +157,63 @@ const Index = () => {
     return (
       <div className="min-h-screen bg-background py-12 px-4">
         <div className="max-w-6xl mx-auto space-y-8">
+          <div className="flex justify-end gap-3 mb-4">
+            {user ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/create-quiz")}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create Quiz
+                </Button>
+                <Button variant="ghost" onClick={signOut} className="gap-2">
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => navigate("/auth")} className="gap-2">
+                <LogIn className="w-4 h-4" />
+                Sign In
+              </Button>
+            )}
+          </div>
+
           <div className="text-center space-y-4 animate-fade-in">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-primary mb-4">
-              <Brain className="w-8 h-8 text-primary-foreground" />
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-primary mb-4 shadow-glow">
+              <Brain className="w-10 h-10 text-primary-foreground" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+            <h1 className="text-5xl md:text-6xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               QuizMaster Pro
             </h1>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Test your knowledge with our engaging quizzes. Track your progress and improve your skills!
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              Challenge yourself with engaging quizzes. Create your own or explore community quizzes!
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {mockQuizzes.map((quiz) => (
-              <QuizCard key={quiz.id} quiz={quiz} onStart={handleStartQuiz} />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+            </div>
+          ) : quizzes && quizzes.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {quizzes.map((quiz) => (
+                <QuizCard key={quiz.id} quiz={quiz} onStart={handleStartQuiz} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 space-y-4">
+              <p className="text-muted-foreground text-lg">No quizzes available yet.</p>
+              {user && (
+                <Button onClick={() => navigate("/create-quiz")} className="bg-gradient-primary hover:opacity-90">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Your First Quiz
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );

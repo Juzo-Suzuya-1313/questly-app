@@ -1,15 +1,5 @@
-import { QuizQuestion as QuizQuestionType } from "@/types/quiz";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-
-interface QuizQuestionProps {
-  question: QuizQuestionType;
-  questionNumber: number;
-  totalQuestions: number;
-  selectedOptionId?: string;
-  onSelectOption: (optionId: string) => void;
-  showCorrectAnswer?: boolean;
-}
 
 export const QuizQuestion = ({
   question,
@@ -18,7 +8,7 @@ export const QuizQuestion = ({
   selectedOptionId,
   onSelectOption,
   showCorrectAnswer = false,
-}: QuizQuestionProps) => {
+}) => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="space-y-2">
@@ -31,10 +21,10 @@ export const QuizQuestion = ({
       </div>
 
       <div className="grid gap-3 md:gap-4">
-        {question.options.map((option) => {
+        {question.options.map((option, index) => {
           const isSelected = selectedOptionId === option.id;
-          const isCorrect = showCorrectAnswer && option.id === question.correctOptionId;
-          const isWrong = showCorrectAnswer && isSelected && option.id !== question.correctOptionId;
+          const isCorrect = showCorrectAnswer && option.id === question.correct_option_id;
+          const isWrong = showCorrectAnswer && isSelected && option.id !== question.correct_option_id;
 
           return (
             <Card
@@ -59,7 +49,7 @@ export const QuizQuestion = ({
                       !isSelected && !showCorrectAnswer && "bg-muted text-muted-foreground"
                     )}
                   >
-                    {String.fromCharCode(65 + question.options.indexOf(option))}
+                    {String.fromCharCode(65 + index)}
                   </div>
                   <p className="text-base md:text-lg font-medium text-foreground">
                     {option.text}
